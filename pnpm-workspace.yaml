@@ -1,0 +1,26 @@
+catalog:
+  typescript: '~5.9.3'
+  '@nestjs/common': '^11.1.14'
+  '@nestjs/core': '11.1.18'
+  '@nestjs/platform-express': '^11.1.14'
+  '@nestjs/config': '^4.0.2'
+  '@nestjs/testing': '^11.1.14'
+  reflect-metadata: '^0.2.2'
+  rxjs: '^7.8.2'
+
+packages:
+  - 'sample/**'
+
+engineStrict: true
+autoInstallPeers: true
+
+overrides:
+  typescript: '~5.9.3'
+
+minimumReleaseAgeExclude:
+  - eslint@10.10.0
+
+allowBuilds:
+  '@nestjs/core': true
+  '@parcel/watcher': true
+  unrs-resolver: true

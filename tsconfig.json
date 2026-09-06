@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.nestjs-lib.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["jest", "node"]
+  },
+  "include": ["src/**/*.ts", "tools/**/*.ts"],
+  "exclude": ["node_modules", "dist", "sample", "jest.config.ts"]
+}

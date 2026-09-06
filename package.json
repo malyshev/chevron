@@ -1,0 +1,73 @@
+{
+  "name": "@nestwork/chevron",
+  "version": "0.0.0",
+  "description": "Lightweight feature-flag module for NestJS with async resolvers, pluggable storage, and named or global gates",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rimraf dist && tsc -p tsconfig.build.json",
+    "build:all": "pnpm run build && pnpm run -r build",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "dev:sample": "pnpm run build && concurrently -n src,sample -c blue,green \"pnpm dev\" \"pnpm --dir sample/000-in-memory-app dev\"",
+    "test": "TZ=UTC jest",
+    "test:all": "pnpm run test && pnpm run -r --if-present test",
+    "lint": "eslint \"src/**/*.ts\" --no-error-on-unmatched-pattern",
+    "lint:fix": "eslint \"src/**/*.ts\" --fix --no-error-on-unmatched-pattern",
+    "check-types": "tsc -p tsconfig.build.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,mjs,yaml,yml}\"",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish",
+    "prepare": "husky"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.0",
+    "@eslint/js": "^10.0.1",
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "@nestjs/testing": "catalog:",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.6",
+    "globals": "^17.12.0",
+    "husky": "^9.1.7",
+    "jest": "^30.2.0",
+    "lint-staged": "^15.5.2",
+    "prettier": "^3.9.6",
+    "reflect-metadata": "catalog:",
+    "rimraf": "^6.0.1",
+    "rxjs": "catalog:",
+    "ts-jest": "^29.4.6",
+    "typescript": "catalog:typescript",
+    "typescript-eslint": "^8.69.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{md,json,mjs}": [
+      "prettier --write"
+    ]
+  },
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
