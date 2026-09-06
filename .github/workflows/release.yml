@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: npm CLI for OIDC publish
+        run: npm install -g npm@11.5.1
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Detect bump
+        id: bump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          chmod +x tools/release/detect-bump.sh tools/release/changelog.sh
+          bump="$(tools/release/detect-bump.sh)"
+          echo "bump=${bump}" >> "${GITHUB_OUTPUT}"
+          echo "Detected bump: ${bump}"
+
+      - name: Release
+        if: steps.bump.outputs.bump == 'minor' || steps.bump.outputs.bump == 'patch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "Serhii Malyshev"
+          git config user.email "malyshev.php@gmail.com"
+
+          npm version "${{ steps.bump.outputs.bump }}" --no-git-tag-version
+          version="$(node -p "require('./package.json').version")"
+          tag="v${version}"
+
+          changelog="$(tools/release/changelog.sh)"
+
+          git add package.json
+          if git diff --cached --quiet; then
+            echo "package.json version did not change"
+            exit 1
+          fi
+          git commit -m "chore(chevron): release ${tag}"
+          git tag "${tag}"
+          git push origin HEAD:master
+          git push origin "${tag}"
+
+          pnpm build
+          npm publish --access public
+
+          gh release create "${tag}" --title "${tag}" --notes "${changelog}"

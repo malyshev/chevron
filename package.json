@@ -1,8 +1,21 @@
 {
   "name": "@nestwork/chevron",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Lightweight feature-flag module for NestJS with async resolvers, pluggable storage, and named or global gates",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/malyshev/chevron.git"
+  },
+  "keywords": [
+    "nestjs",
+    "nest",
+    "nodejs",
+    "feature",
+    "flags",
+    "feature-flags",
+    "feature-toggles"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -62,7 +75,7 @@
       "prettier --write",
       "eslint --fix"
     ],
-    "*.{md,json,mjs}": [
+    "*.{md,json,mjs,yml,yaml}": [
       "prettier --write"
     ]
   },
