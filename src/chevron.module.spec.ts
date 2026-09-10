@@ -570,16 +570,151 @@ describe('ChevronModule', () => {
         await expect(service.active('driver-memory')).resolves.toBe(true);
     });
 
-    it('throws when env storage driver is requested before implementation', async () => {
-        await expect(
-            Test.createTestingModule({
+    it('keeps process.env values when define is called for the first time without an env fixture', async () => {
+        const processEnvKey = 'CHEVRON_MODULE_SPEC_BETA';
+        process.env[processEnvKey] = 'true';
+
+        try {
+            const moduleRef = await Test.createTestingModule({
                 imports: [
                     ChevronModule.forRoot({
-                        storage: { driver: 'env', prefix: 'FEATURE_' },
+                        storage: {
+                            driver: 'env',
+                            prefix: 'CHEVRON_MODULE_SPEC_',
+                        },
                     }),
                 ],
-            }).compile(),
-        ).rejects.toThrow('Env storage driver is not implemented yet.');
+            }).compile();
+
+            const service = moduleRef.get(ChevronService);
+            service.define('beta', () => false);
+
+            await expect(service.value('beta')).resolves.toBe(true);
+        } finally {
+            delete process.env[processEnvKey];
+        }
+    });
+
+    it('keeps env storage values when define is called for the first time', async () => {
+        const moduleRef = await Test.createTestingModule({
+            imports: [
+                ChevronModule.forRoot({
+                    storage: {
+                        driver: 'env',
+                        prefix: 'FEATURE_',
+                        env: { FEATURE_BETA: 'true' },
+                    },
+                }),
+            ],
+        }).compile();
+
+        const service = moduleRef.get(ChevronService);
+        service.define('beta', () => false);
+
+        await expect(service.value('beta')).resolves.toBe(true);
+    });
+
+    it('keeps env storage values when the features map names the same flag', async () => {
+        const moduleRef = await Test.createTestingModule({
+            imports: [
+                ChevronModule.forRoot({
+                    storage: {
+                        driver: 'env',
+                        prefix: 'FEATURE_',
+                        env: { FEATURE_USE_NEW_API: 'true' },
+                    },
+                    features: {
+                        useNewApi: false,
+                    },
+                }),
+            ],
+        }).compile();
+
+        const service = moduleRef.get(ChevronService);
+
+        await expect(service.active('useNewApi')).resolves.toBe(true);
+    });
+
+    it('resolves env-only flags without define when storage is { driver: "env" }', async () => {
+        const moduleRef = await Test.createTestingModule({
+            imports: [
+                ChevronModule.forRoot({
+                    storage: {
+                        driver: 'env',
+                        prefix: 'FEATURE_',
+                        env: { FEATURE_USE_NEW_API: 'true' },
+                    },
+                }),
+            ],
+        }).compile();
+
+        const service = moduleRef.get(ChevronService);
+
+        await expect(service.active('useNewApi')).resolves.toBe(true);
+        await expect(service.active('notInEnv')).resolves.toBe(false);
+    });
+
+    it('resolves the env storage driver on async registration', async () => {
+        const moduleRef = await Test.createTestingModule({
+            imports: [
+                ChevronModule.forRootAsync({
+                    useFactory: () => ({
+                        storage: {
+                            driver: 'env',
+                            prefix: 'FEATURE_',
+                            env: { FEATURE_USE_NEW_API: 'true' },
+                        },
+                    }),
+                }),
+            ],
+        }).compile();
+
+        const service = moduleRef.get(ChevronService);
+
+        await expect(service.active('useNewApi')).resolves.toBe(true);
+    });
+
+    it('gives each named env gate its own storage filled from its own prefix', async () => {
+        @Injectable()
+        class BillingConsumer {
+            constructor(
+                @InjectChevron() readonly defaultGate: ChevronService,
+                @InjectChevron('billing') readonly billing: ChevronService,
+            ) {}
+        }
+
+        @Module({
+            imports: [
+                ChevronModule.forRoot({
+                    storage: {
+                        driver: 'env',
+                        prefix: 'FEATURE_',
+                        env: { FEATURE_USE_NEW_API: 'true' },
+                    },
+                }),
+                ChevronModule.forRoot({
+                    name: 'billing',
+                    storage: {
+                        driver: 'env',
+                        prefix: 'BILLING_',
+                        env: { BILLING_NEW_INVOICES: 'true' },
+                    },
+                }),
+            ],
+            providers: [BillingConsumer],
+        })
+        class HostModule {}
+
+        const moduleRef = await Test.createTestingModule({
+            imports: [HostModule],
+        }).compile();
+
+        const consumer = moduleRef.get(BillingConsumer);
+
+        await expect(consumer.defaultGate.active('useNewApi')).resolves.toBe(true);
+        await expect(consumer.defaultGate.active('newInvoices')).resolves.toBe(false);
+        await expect(consumer.billing.active('newInvoices')).resolves.toBe(true);
+        await expect(consumer.billing.active('useNewApi')).resolves.toBe(false);
     });
 
     it('allows re-registering a gate after module shutdown', async () => {

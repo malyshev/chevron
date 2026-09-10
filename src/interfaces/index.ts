@@ -12,8 +12,8 @@ export type { FeatureResolver, FeatureResolverFn, FeatureValue } from './chevron
 export type { ChevronStorage } from './chevron-storage.interface';
 
 export type {
-    ChevronDatabaseDriverOptions,
     ChevronEnvDriverOptions,
     ChevronMemoryDriverOptions,
     ChevronStorageDriverOptions,
+    EnvChevronStorageOptions,
 } from './chevron-driver-options.interface';

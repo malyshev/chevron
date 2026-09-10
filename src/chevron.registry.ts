@@ -1,4 +1,3 @@
-import { GLOBAL_NULL_SCOPE } from './chevron.constants';
 import { FeatureResolver, FeatureResolverFn, FeatureValue, ChevronStorage } from './interfaces';
 
 export class ChevronRegistry {
@@ -15,8 +14,16 @@ export class ChevronRegistry {
     constructor(private readonly storage: ChevronStorage) {}
 
     define(feature: string, resolver: FeatureResolver): void {
+        const wasDefined = this.definitions.has(feature);
         this.definitions.set(feature, resolver);
-        this.invalidateFeature(feature);
+
+        if (wasDefined) {
+            this.invalidateFeature(feature);
+
+            return;
+        }
+
+        this.invalidateCache(feature);
     }
 
     defined(): string[] {
@@ -40,11 +47,9 @@ export class ChevronRegistry {
     }
 
     async activate(feature: string, featureValue: FeatureValue = true): Promise<void> {
-        const cacheKey = this.cacheKey(feature);
-
-        await this.storage.set(feature, GLOBAL_NULL_SCOPE, featureValue);
-        this.bumpGeneration(cacheKey);
-        this.cache.set(cacheKey, featureValue);
+        await this.storage.set(feature, featureValue);
+        this.bumpGeneration(feature);
+        this.cache.set(feature, featureValue);
     }
 
     async deactivate(feature: string): Promise<void> {
@@ -52,11 +57,9 @@ export class ChevronRegistry {
     }
 
     async forget(feature: string): Promise<void> {
-        const cacheKey = this.cacheKey(feature);
-
-        await this.storage.delete(feature, GLOBAL_NULL_SCOPE);
-        this.bumpGeneration(cacheKey);
-        this.cache.delete(cacheKey);
+        await this.storage.delete(feature);
+        this.bumpGeneration(feature);
+        this.cache.delete(feature);
     }
 
     async purge(features?: string[]): Promise<void> {
@@ -71,42 +74,40 @@ export class ChevronRegistry {
     }
 
     private async resolveValue(feature: string): Promise<FeatureValue | false> {
-        const cacheKey = this.cacheKey(feature);
-
-        if (this.cache.has(cacheKey)) {
-            return this.cache.get(cacheKey) as FeatureValue;
+        if (this.cache.has(feature)) {
+            return this.cache.get(feature) as FeatureValue;
         }
 
-        const pendingLookup = this.pendingLookups.get(cacheKey);
+        const pendingLookup = this.pendingLookups.get(feature);
 
         if (pendingLookup !== undefined) {
             return pendingLookup;
         }
 
-        const lookup = this.lookupValue(feature, cacheKey);
-        this.pendingLookups.set(cacheKey, lookup);
+        const lookup = this.lookupValue(feature);
+        this.pendingLookups.set(feature, lookup);
 
         try {
             return await lookup;
         } finally {
-            if (this.pendingLookups.get(cacheKey) === lookup) {
-                this.pendingLookups.delete(cacheKey);
+            if (this.pendingLookups.get(feature) === lookup) {
+                this.pendingLookups.delete(feature);
             }
         }
     }
 
-    private async lookupValue(feature: string, cacheKey: string): Promise<FeatureValue | false> {
-        const generation = this.snapshotGeneration(cacheKey);
+    private async lookupValue(feature: string): Promise<FeatureValue | false> {
+        const generation = this.snapshotGeneration(feature);
 
-        const stored = await this.storage.get(feature, GLOBAL_NULL_SCOPE);
+        const stored = await this.storage.get(feature);
 
-        if (this.cache.has(cacheKey)) {
-            return this.cache.get(cacheKey) as FeatureValue;
+        if (this.cache.has(feature)) {
+            return this.cache.get(feature) as FeatureValue;
         }
 
         if (stored !== undefined) {
-            if (this.isCurrentGeneration(cacheKey, generation)) {
-                this.cache.set(cacheKey, stored);
+            if (this.isCurrentGeneration(feature, generation)) {
+                this.cache.set(feature, stored);
             }
 
             return stored;
@@ -120,20 +121,20 @@ export class ChevronRegistry {
 
         const resolved = await this.resolveDefinition(resolver);
 
-        if (this.cache.has(cacheKey)) {
-            return this.cache.get(cacheKey) as FeatureValue;
+        if (this.cache.has(feature)) {
+            return this.cache.get(feature) as FeatureValue;
         }
 
-        if (this.isCurrentGeneration(cacheKey, generation)) {
-            await this.storage.set(feature, GLOBAL_NULL_SCOPE, resolved);
+        if (this.isCurrentGeneration(feature, generation)) {
+            await this.storage.set(feature, resolved);
 
             // A mutator may have landed while storage.set() was in flight. ChevronStorage has no
             // compare-and-swap, so our write already physically landed and may have clobbered
             // whatever the mutator wrote; heal it instead of just skipping the cache update.
-            if (this.isCurrentGeneration(cacheKey, generation)) {
-                this.cache.set(cacheKey, resolved);
+            if (this.isCurrentGeneration(feature, generation)) {
+                this.cache.set(feature, resolved);
             } else {
-                await this.healStaleWrite(feature, cacheKey);
+                await this.healStaleWrite(feature);
             }
         }
 
@@ -152,17 +153,15 @@ export class ChevronRegistry {
         return typeof resolver === 'function';
     }
 
-    private cacheKey(feature: string): string {
-        return `${feature}:${GLOBAL_NULL_SCOPE}`;
+    private invalidateCache(feature: string): void {
+        this.bumpGeneration(feature);
+        this.cache.delete(feature);
     }
 
     private invalidateFeature(feature: string): void {
-        const cacheKey = this.cacheKey(feature);
+        this.invalidateCache(feature);
 
-        this.bumpGeneration(cacheKey);
-        this.cache.delete(cacheKey);
-
-        const deleted = this.storage.delete(feature, GLOBAL_NULL_SCOPE);
+        const deleted = this.storage.delete(feature);
 
         // define() stays sync, so this delete is fire-and-forget: the old override can still be
         // physically present in storage for a while after we return. A lookup that reads it in
@@ -173,8 +172,7 @@ export class ChevronRegistry {
         if (deleted instanceof Promise) {
             void deleted.then(
                 () => {
-                    this.bumpGeneration(cacheKey);
-                    this.cache.delete(cacheKey);
+                    this.invalidateCache(feature);
                 },
                 () => {},
             );
@@ -190,8 +188,8 @@ export class ChevronRegistry {
         }
 
         for (const feature of features) {
-            this.bumpGeneration(this.cacheKey(feature));
-            this.cache.delete(this.cacheKey(feature));
+            this.bumpGeneration(feature);
+            this.cache.delete(feature);
         }
     }
 
@@ -204,19 +202,19 @@ export class ChevronRegistry {
     // while it's in flight and get clobbered in turn. So loop: re-snapshot what's authoritative
     // right before each attempt, and only stop once an attempt lands without anything having
     // changed since its own snapshot. This converges as long as mutations eventually quiesce.
-    private async healStaleWrite(feature: string, cacheKey: string): Promise<void> {
+    private async healStaleWrite(feature: string): Promise<void> {
         for (;;) {
-            const generation = this.snapshotGeneration(cacheKey);
-            const hasCacheValue = this.cache.has(cacheKey);
-            const cacheValue = this.cache.get(cacheKey) as FeatureValue;
+            const generation = this.snapshotGeneration(feature);
+            const hasCacheValue = this.cache.has(feature);
+            const cacheValue = this.cache.get(feature) as FeatureValue;
 
             if (hasCacheValue) {
-                await this.storage.set(feature, GLOBAL_NULL_SCOPE, cacheValue);
+                await this.storage.set(feature, cacheValue);
             } else {
-                await this.storage.delete(feature, GLOBAL_NULL_SCOPE);
+                await this.storage.delete(feature);
             }
 
-            if (this.isCurrentGeneration(cacheKey, generation)) {
+            if (this.isCurrentGeneration(feature, generation)) {
                 return;
             }
         }
@@ -225,19 +223,19 @@ export class ChevronRegistry {
     // A lookup in flight when a mutator runs must not persist its (now stale) result: every
     // mutator bumps the affected feature's generation (or the global one for a full purge), and
     // lookupValue rechecks its snapshot before writing to cache/storage.
-    private bumpGeneration(cacheKey: string): void {
-        this.featureGenerations.set(cacheKey, (this.featureGenerations.get(cacheKey) ?? 0) + 1);
+    private bumpGeneration(feature: string): void {
+        this.featureGenerations.set(feature, (this.featureGenerations.get(feature) ?? 0) + 1);
     }
 
-    private snapshotGeneration(cacheKey: string): readonly [number, number] {
-        return [this.globalGeneration, this.featureGenerations.get(cacheKey) ?? 0];
+    private snapshotGeneration(feature: string): readonly [number, number] {
+        return [this.globalGeneration, this.featureGenerations.get(feature) ?? 0];
     }
 
-    private isCurrentGeneration(cacheKey: string, snapshot: readonly [number, number]): boolean {
+    private isCurrentGeneration(feature: string, snapshot: readonly [number, number]): boolean {
         const [snapshotGlobal, snapshotFeature] = snapshot;
 
         return (
-            this.globalGeneration === snapshotGlobal && (this.featureGenerations.get(cacheKey) ?? 0) === snapshotFeature
+            this.globalGeneration === snapshotGlobal && (this.featureGenerations.get(feature) ?? 0) === snapshotFeature
         );
     }
 }

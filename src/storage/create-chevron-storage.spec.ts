@@ -1,4 +1,5 @@
 import { InMemoryChevronStorage } from './in-memory-chevron.storage';
+import { EnvChevronStorage } from './env-chevron.storage';
 import { createChevronStorageFromDriver, isChevronStorageDriverOptions } from './create-chevron-storage';
 
 describe('createChevronStorageFromDriver', () => {
@@ -23,16 +24,65 @@ describe('createChevronStorageFromDriver', () => {
         ).toThrow('Memory storage driver does not accept "prefix".');
     });
 
-    it('throws for env driver before implementation', () => {
-        expect(() => createChevronStorageFromDriver({ driver: 'env', prefix: 'FEATURE_' })).toThrow(
-            'Env storage driver is not implemented yet.',
+    it('rejects leftover overlay and nameTransform on memory driver', () => {
+        expect(() =>
+            createChevronStorageFromDriver({
+                driver: 'memory',
+                overlay: true,
+            } as never),
+        ).toThrow('Memory storage driver does not accept "overlay".');
+        expect(() =>
+            createChevronStorageFromDriver({
+                driver: 'memory',
+                nameTransform: 'camelCase',
+            } as never),
+        ).toThrow('Memory storage driver does not accept "nameTransform".');
+    });
+
+    it('creates env storage filled from the env fixture', () => {
+        const storage = createChevronStorageFromDriver({
+            driver: 'env',
+            prefix: 'FEATURE_',
+            env: { FEATURE_USE_NEW_API: 'true' },
+        });
+
+        expect(storage).toBeInstanceOf(EnvChevronStorage);
+        expect(storage.get('useNewApi')).toBe(true);
+    });
+
+    describe('without an env fixture', () => {
+        const processEnvKey = 'CHEVRON_FACTORY_SPEC_USE_NEW_API';
+
+        afterEach(() => {
+            delete process.env[processEnvKey];
+        });
+
+        it('fills env storage from process.env', () => {
+            process.env[processEnvKey] = 'true';
+
+            const storage = createChevronStorageFromDriver({
+                driver: 'env',
+                prefix: 'CHEVRON_FACTORY_SPEC_',
+            });
+
+            expect(storage.get('useNewApi')).toBe(true);
+        });
+    });
+
+    it('throws when env driver is missing a prefix', () => {
+        expect(() => createChevronStorageFromDriver({ driver: 'env' } as never)).toThrow(
+            'Env storage driver requires a non-empty prefix.',
         );
     });
 
-    it('throws for database driver before implementation', () => {
-        expect(() => createChevronStorageFromDriver({ driver: 'database' })).toThrow(
-            'Database storage driver is not implemented yet.',
-        );
+    it('rejects leftover keys on env driver', () => {
+        expect(() =>
+            createChevronStorageFromDriver({
+                driver: 'env',
+                prefix: 'FEATURE_',
+                overlay: true,
+            } as never),
+        ).toThrow('Env storage driver does not accept "overlay".');
     });
 
     it('throws for unknown driver literals', () => {

@@ -30,8 +30,9 @@
     "build:all": "pnpm run build && pnpm run -r build",
     "dev": "tsc -p tsconfig.build.json --watch",
     "dev:sample": "pnpm run build && concurrently -n src,sample -c blue,green \"pnpm dev\" \"pnpm --dir sample/000-in-memory-app dev\"",
+    "dev:sample:env": "pnpm run build && concurrently -n src,sample -c blue,green \"pnpm dev\" \"pnpm --dir sample/001-env-storage-sample dev\"",
     "test": "TZ=UTC jest",
-    "test:all": "pnpm run test && pnpm run -r --if-present test",
+    "test:all": "pnpm run test && pnpm run build && pnpm run -r --if-present test",
     "lint": "eslint \"src/**/*.ts\" --no-error-on-unmatched-pattern",
     "lint:fix": "eslint \"src/**/*.ts\" --fix --no-error-on-unmatched-pattern",
     "check-types": "tsc -p tsconfig.build.json --noEmit",
@@ -67,7 +68,7 @@
     "rimraf": "^6.0.1",
     "rxjs": "catalog:",
     "ts-jest": "^29.4.6",
-    "typescript": "catalog:typescript",
+    "typescript": "catalog:",
     "typescript-eslint": "^8.69.0"
   },
   "lint-staged": {

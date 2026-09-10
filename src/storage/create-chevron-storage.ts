@@ -1,4 +1,6 @@
 import { ChevronStorage, ChevronStorageDriverOptions } from '../interfaces';
+import { assertStorageOptionKeys } from './assert-storage-option-keys';
+import { EnvChevronStorage } from './env-chevron.storage';
 import { InMemoryChevronStorage } from './in-memory-chevron.storage';
 
 export function isChevronStorageDriverOptions(registration: unknown): registration is ChevronStorageDriverOptions {
@@ -17,32 +19,19 @@ export function createChevronStorageFromDriver(options: ChevronStorageDriverOpti
     const driver = options.driver ?? 'memory';
 
     if (driver === 'memory') {
-        assertMemoryDriverOptions(options);
+        assertStorageOptionKeys(options, ['driver'], 'Memory storage driver');
 
         return new InMemoryChevronStorage();
     }
 
-    if (driver === 'env') {
-        throw new TypeError('Env storage driver is not implemented yet.');
-    }
+    if (options.driver === 'env') {
+        assertStorageOptionKeys(options, ['driver', 'prefix', 'env'], 'Env storage driver');
 
-    if (driver === 'database') {
-        throw new TypeError('Database storage driver is not implemented yet.');
+        return new EnvChevronStorage({
+            prefix: options.prefix,
+            env: options.env,
+        });
     }
 
     throw new TypeError(`Unknown chevron storage driver "${String(driver)}".`);
-}
-
-function assertMemoryDriverOptions(options: ChevronStorageDriverOptions): void {
-    if (options.driver !== undefined && options.driver !== 'memory') {
-        return;
-    }
-
-    const forbiddenKeys = ['prefix', 'overlay', 'nameTransform', 'env'] as const;
-
-    for (const key of forbiddenKeys) {
-        if (key in options) {
-            throw new TypeError(`Memory storage driver does not accept "${key}".`);
-        }
-    }
 }

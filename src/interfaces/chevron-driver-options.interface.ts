@@ -2,17 +2,13 @@ export type ChevronMemoryDriverOptions = {
     driver?: 'memory';
 };
 
-export type ChevronEnvDriverOptions = {
-    driver: 'env';
+export type EnvChevronStorageOptions = {
     prefix: string;
-    overlay?: boolean;
-    nameTransform?: 'camelCase';
     env?: Readonly<Record<string, string | undefined>>;
 };
 
-export type ChevronDatabaseDriverOptions = {
-    driver: 'database';
+export type ChevronEnvDriverOptions = EnvChevronStorageOptions & {
+    driver: 'env';
 };
 
-export type ChevronStorageDriverOptions =
-    ChevronMemoryDriverOptions | ChevronEnvDriverOptions | ChevronDatabaseDriverOptions;
+export type ChevronStorageDriverOptions = ChevronMemoryDriverOptions | ChevronEnvDriverOptions;

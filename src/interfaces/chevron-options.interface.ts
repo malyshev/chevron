@@ -4,7 +4,6 @@ import { FeatureResolver } from './chevron-resolver.type';
 import { ChevronStorageDriverOptions } from './chevron-driver-options.interface';
 
 export type {
-    ChevronDatabaseDriverOptions,
     ChevronEnvDriverOptions,
     ChevronMemoryDriverOptions,
     ChevronStorageDriverOptions,
