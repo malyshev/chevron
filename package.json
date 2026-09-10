@@ -1,6 +1,6 @@
 {
   "name": "@nestwork/chevron",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lightweight feature-flag module for NestJS with async resolvers, pluggable storage, and named or global gates",
   "license": "MIT",
   "repository": {
