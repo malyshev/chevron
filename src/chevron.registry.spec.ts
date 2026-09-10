@@ -2,8 +2,6 @@ import { ChevronRegistry } from './chevron.registry';
 import { ChevronStorage, FeatureValue } from './interfaces';
 import { InMemoryChevronStorage } from './storage/in-memory-chevron.storage';
 
-const GLOBAL_NULL_SCOPE = '__chevron_null__';
-
 function flushMicrotasks(): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -55,11 +53,11 @@ class DelayedWriteStorage implements ChevronStorage {
         this.releaseDeleteGate?.();
     }
 
-    get(feature: string, scope: string): FeatureValue | undefined {
-        return this.values.get(`${feature}:${scope}`);
+    get(feature: string): FeatureValue | undefined {
+        return this.values.get(feature);
     }
 
-    async set(feature: string, scope: string, value: FeatureValue): Promise<void> {
+    async set(feature: string, value: FeatureValue): Promise<void> {
         const pending = this.setGate;
         this.setGate = null;
         this.setStarted?.();
@@ -69,10 +67,10 @@ class DelayedWriteStorage implements ChevronStorage {
             await pending;
         }
 
-        this.values.set(`${feature}:${scope}`, value);
+        this.values.set(feature, value);
     }
 
-    async delete(feature: string, scope: string): Promise<void> {
+    async delete(feature: string): Promise<void> {
         const pending = this.deleteGate;
         this.deleteGate = null;
         this.deleteStarted?.();
@@ -82,7 +80,7 @@ class DelayedWriteStorage implements ChevronStorage {
             await pending;
         }
 
-        this.values.delete(`${feature}:${scope}`);
+        this.values.delete(feature);
     }
 
     purge(): void {
@@ -190,6 +188,30 @@ describe('ChevronRegistry', () => {
 
         await expect(registry.active('feature')).resolves.toBe(false);
         await expect(registry.inactive('feature')).resolves.toBe(true);
+    });
+
+    it('first define keeps existing storage values so storage wins over the resolver', async () => {
+        const storage = new InMemoryChevronStorage();
+        storage.set('beta', true);
+
+        const registry = new ChevronRegistry(storage);
+        registry.define('beta', () => false);
+
+        expect(storage.get('beta')).toBe(true);
+        await expect(registry.value('beta')).resolves.toBe(true);
+    });
+
+    it('bootstrapFeatures keeps existing storage values so storage wins over the map', async () => {
+        const storage = new InMemoryChevronStorage();
+        storage.set('useNewApi', true);
+
+        const registry = new ChevronRegistry(storage);
+        registry.bootstrapFeatures({
+            useNewApi: false,
+        });
+
+        expect(storage.get('useNewApi')).toBe(true);
+        await expect(registry.active('useNewApi')).resolves.toBe(true);
     });
 
     it('redefine invalidates cached and stored values', async () => {
@@ -338,7 +360,7 @@ describe('ChevronRegistry', () => {
         await lookup;
 
         await expect(registry.value('feature')).resolves.toBe('fresh-activated');
-        expect(storage.get('feature', GLOBAL_NULL_SCOPE)).toBe('fresh-activated');
+        expect(storage.get('feature')).toBe('fresh-activated');
     });
 
     it('heals a stale write that lands in storage after a concurrent forget()', async () => {
@@ -356,7 +378,7 @@ describe('ChevronRegistry', () => {
         storage.releaseSet();
         await lookup;
 
-        expect(storage.get('feature', GLOBAL_NULL_SCOPE)).toBeUndefined();
+        expect(storage.get('feature')).toBeUndefined();
     });
 
     it('does not permanently re-cache a stored override that define() is still deleting', async () => {
@@ -366,7 +388,7 @@ describe('ChevronRegistry', () => {
         registry.define('feature', () => 'old-resolver-value');
         await flushMicrotasks();
         await registry.value('feature');
-        expect(storage.get('feature', GLOBAL_NULL_SCOPE)).toBe('old-resolver-value');
+        expect(storage.get('feature')).toBe('old-resolver-value');
 
         const deleteStarted = storage.armDelete();
         registry.define('feature', () => 'new-resolver-value');
@@ -430,11 +452,11 @@ describe('ChevronRegistry', () => {
                 this.rejectDeleteGate?.(new Error('connection dropped'));
             }
 
-            get(feature: string, scope: string): FeatureValue | undefined {
-                return this.values.get(`${feature}:${scope}`);
+            get(feature: string): FeatureValue | undefined {
+                return this.values.get(feature);
             }
 
-            async set(feature: string, scope: string, value: FeatureValue): Promise<void> {
+            async set(feature: string, value: FeatureValue): Promise<void> {
                 const pending = this.setGate;
                 this.setGate = null;
                 this.setStarted?.();
@@ -444,10 +466,10 @@ describe('ChevronRegistry', () => {
                     await pending;
                 }
 
-                this.values.set(`${feature}:${scope}`, value);
+                this.values.set(feature, value);
             }
 
-            async delete(feature: string, scope: string): Promise<void> {
+            async delete(feature: string): Promise<void> {
                 const pending = this.deleteGate;
                 this.deleteGate = null;
                 this.deleteStarted?.();
@@ -457,7 +479,7 @@ describe('ChevronRegistry', () => {
                     await pending;
                 }
 
-                this.values.delete(`${feature}:${scope}`);
+                this.values.delete(feature);
             }
 
             purge(): void {
@@ -468,6 +490,12 @@ describe('ChevronRegistry', () => {
         const storage = new RacingFailingStorage();
         const registry = new ChevronRegistry(storage);
         let calls = 0;
+
+        registry.define('feature', () => {
+            calls += 1;
+
+            return 'v';
+        });
 
         const deleteStarted = storage.armFailingDelete();
         registry.define('feature', () => {
@@ -489,7 +517,7 @@ describe('ChevronRegistry', () => {
         await lookup;
 
         expect(calls).toBe(1);
-        expect(storage.get('feature', GLOBAL_NULL_SCOPE)).toBe('v');
+        expect(storage.get('feature')).toBe('v');
 
         // If the rejected delete had falsely bumped generation, healStaleWrite would have found
         // no cache entry and deleted what the write above just stored, forcing a second resolver
@@ -527,11 +555,11 @@ describe('ChevronRegistry', () => {
                 this.releases[index]?.();
             }
 
-            get(feature: string, scope: string): FeatureValue | undefined {
-                return this.values.get(`${feature}:${scope}`);
+            get(feature: string): FeatureValue | undefined {
+                return this.values.get(feature);
             }
 
-            async set(feature: string, scope: string, value: FeatureValue): Promise<void> {
+            async set(feature: string, value: FeatureValue): Promise<void> {
                 const index = this.callIndex;
                 this.callIndex += 1;
                 this.startSignals[index]?.();
@@ -542,11 +570,11 @@ describe('ChevronRegistry', () => {
                     await gate;
                 }
 
-                this.values.set(`${feature}:${scope}`, value);
+                this.values.set(feature, value);
             }
 
-            async delete(feature: string, scope: string): Promise<void> {
-                this.values.delete(`${feature}:${scope}`);
+            async delete(feature: string): Promise<void> {
+                this.values.delete(feature);
             }
 
             purge(): void {
@@ -583,6 +611,6 @@ describe('ChevronRegistry', () => {
 
         // forget() is the last authoritative mutation: no override should remain, even though
         // heal's own write raced it.
-        expect(storage.get('feature', GLOBAL_NULL_SCOPE)).toBeUndefined();
+        expect(storage.get('feature')).toBeUndefined();
     });
 });
